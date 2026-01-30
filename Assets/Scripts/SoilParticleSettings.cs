@@ -23,6 +23,9 @@ public class RockObjectDetector : MonoBehaviour
     [Tooltip("Terrainとバケットの両方に衝突したと判定する時間(秒)")]
     public float bothCollideWindowSeconds = 3.0f;
 
+    public float terrainStickWindowSeconds = 5.0f;
+    public float terrainStickForce = 30.0f;
+
     public double timecreated { get; private set; } = 0.0;
     public Vector3 pos_last_terrain_collision { get; private set; } = Vector3.zero;  // 最後にTerrainと衝突した位置
     public Vector3 pos_last_bucket_collision { get; private set; } = Vector3.zero;  // 最後にバケットと衝突した位置
@@ -62,10 +65,12 @@ public class RockObjectDetector : MonoBehaviour
 
         if (other.gameObject.name == terrainObjectName)
         {
+            pos_last_terrain_collision = transform.position;
             last_terrain_collision_time = Time.timeAsDouble;
         }
         else if (other.gameObject.name == bucketObjectName)
         {
+            pos_last_bucket_collision = transform.position;
             last_bucket_collision_time = Time.timeAsDouble;
         }
     }
@@ -77,10 +82,12 @@ public class RockObjectDetector : MonoBehaviour
 
         if (other.gameObject.name == terrainObjectName)
         {
+            pos_last_terrain_collision = transform.position;
             last_terrain_collision_time = Time.timeAsDouble;
         }
         else if (other.gameObject.name == bucketObjectName)
         {
+            pos_last_bucket_collision = transform.position;
             last_bucket_collision_time = Time.timeAsDouble;
         }
     }
@@ -147,12 +154,20 @@ public class RockObjectDetector : MonoBehaviour
 
     private void FixedUpdate()
     {
+        var now = Time.timeAsDouble;
+        if (now - last_terrain_collision_time <= terrainStickWindowSeconds)
+        {
+            var rigidbody = GetComponent<Rigidbody>();
+            var delta = pos_last_terrain_collision - transform.position;
+            rigidbody.AddForce(delta * terrainStickForce);
+        }
+
         if (both_collided)
         {
             CheckReenableCollisions();
         }
 
-        if (Time.timeAsDouble - timecreated > 1.5)
+        if (now - timecreated > 1.5)
         {
             var rigidbody = GetComponent<Rigidbody>();
 
@@ -197,6 +212,12 @@ public class SoilParticleSettings : MonoBehaviour
     [Tooltip("粒子間力の強さ")]
     public float stickForce = 30.0f;
 
+    [Tooltip("Terrainに接着する時間(秒)")]
+    public float terrainStickWindowSeconds = 5.0f;
+
+    [Tooltip("Terrainに接着する力")]
+    public float terrainStickForce = 30.0f;
+
     [SerializeField]
     [Tooltip("地面の自然崩壊をシミュレートする際に用いる安息角の大きさ(x,y比)")]
     public Vector2 m_AngleOfRepose = new Vector2(30.0f, 45.0f);
@@ -221,7 +242,8 @@ public class SoilParticleSettings : MonoBehaviour
     private JobHandle job_handle;
     private bool job_started = false;
     private NativeArray<float3> job_positions;
-    private NativeArray<float3> job_forces;
+    private NativeArray<float3> job_stickForces;
+    private NativeArray<float3> job_repulseForces;
 
     private float timeElapsed = 0.0f;
 
@@ -312,6 +334,8 @@ public class SoilParticleSettings : MonoBehaviour
         detector.terrainObjectName = terrainObjectName;
         detector.bucketObjectName = bucketObjectName;
         detector.bothCollideWindowSeconds = bothCollideWindowSeconds;
+        detector.terrainStickWindowSeconds = terrainStickWindowSeconds;
+        detector.terrainStickForce = terrainStickForce;
         rock.GetComponent<MeshFilter>().sharedMesh = mesh_patterns[UnityEngine.Random.Range(0, mesh_patterns.Count)];
 
         rocks.Add(rock);
@@ -351,13 +375,18 @@ public class SoilParticleSettings : MonoBehaviour
         [ReadOnly]
         public float particleStickDistance;
         [ReadOnly]
+        public float particleRepulseDistance;
+        [ReadOnly]
         public NativeArray<float3> positions;
         [WriteOnly]
-        public NativeArray<float3> forces;
+        public NativeArray<float3> stickForces;
+        [WriteOnly]
+        public NativeArray<float3> repulseForces;
 
         public void Execute(int index)
         {
             var rock1 = positions[index];
+            var stickvector = new float3(0, 0, 0);
             var repulvector = new float3(0, 0, 0);
             for (var j = 0; j < positions.Length; j++)
             {
@@ -365,10 +394,15 @@ public class SoilParticleSettings : MonoBehaviour
                 float dist = math.distance(rock1, rock2);
                 if (dist < particleStickDistance)
                 {
+                    stickvector += rock1 - rock2;
+                }
+                if (dist < particleRepulseDistance)
+                {
                     repulvector += rock1 - rock2;
                 }
             }
-            forces[index] = math.normalize(repulvector);
+            stickForces[index] = math.normalize(stickvector);
+            repulseForces[index] = math.normalize(repulvector);
         }
     }
 
@@ -378,7 +412,8 @@ public class SoilParticleSettings : MonoBehaviour
         {
             job_handle.Complete();
             job_positions.Dispose();
-            job_forces.Dispose();
+            job_stickForces.Dispose();
+            job_repulseForces.Dispose();
         }
     }
 
@@ -388,24 +423,31 @@ public class SoilParticleSettings : MonoBehaviour
         if (job_started)
         {
             job_handle.Complete();
-            if (rocks.Count == job.forces.Length)
+            if (rocks.Count == job.stickForces.Length && rocks.Count == job.repulseForces.Length)
             {
                 for (var i = 0; i < rocks.Count; i++)
                 {
                     var rock1 = rocks[i];
-                    var f = job.forces[i];
-                    if (!float.IsNaN(f.x))
+                    var stick = job.stickForces[i];
+                    var repulse = job.repulseForces[i];
+                    if (!float.IsNaN(repulse.x))
                     {
-                        rock1.GetComponent<Rigidbody>().AddForce(-f * SoilParticleSettings.instance.stickForce);
+                        rock1.GetComponent<Rigidbody>().AddForce(repulse * SoilParticleSettings.instance.repulseForce);
+                    }
+                    else if (!float.IsNaN(stick.x))
+                    {
+                        rock1.GetComponent<Rigidbody>().AddForce(-stick * SoilParticleSettings.instance.stickForce);
                     }
                 }
             }
             job_positions.Dispose();
-            job_forces.Dispose();
+            job_stickForces.Dispose();
+            job_repulseForces.Dispose();
         }
 
         job_positions = new NativeArray<float3>(rocks.Count, Allocator.Persistent);
-        job_forces = new NativeArray<float3>(rocks.Count, Allocator.Persistent);
+        job_stickForces = new NativeArray<float3>(rocks.Count, Allocator.Persistent);
+        job_repulseForces = new NativeArray<float3>(rocks.Count, Allocator.Persistent);
 
         for (var i = 0; i < rocks.Count; i++)
         {
@@ -415,10 +457,12 @@ public class SoilParticleSettings : MonoBehaviour
 
         job = new ParticleForceJob();
         job.particleStickDistance = (float)SoilParticleSettings.instance.partileStickDistance;
+        job.particleRepulseDistance = (float)SoilParticleSettings.instance.partileRepulseDistance;
         job.positions = job_positions;
-        job.forces = job_forces;
+        job.stickForces = job_stickForces;
+        job.repulseForces = job_repulseForces;
 
-        job_handle = job.Schedule(job_forces.Length, 1);
+        job_handle = job.Schedule(job_positions.Length, 1);
         job_started = true;
     }
 
