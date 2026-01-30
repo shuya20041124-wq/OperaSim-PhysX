@@ -16,42 +16,153 @@ public class RockObjectDetector : MonoBehaviour
 
     [Tooltip("衝突イベントを通知する先のマネージャクラス")]
     public SoilParticleSettings manager;
-    private double timecreated = 0.0;
-    private Vector3 pos_last_collision = Vector3.zero;
+    [Tooltip("Terrainとして扱うGameObject名")]
+    public string terrainObjectName = "Terrain";
+    [Tooltip("バケットとして扱うGameObject名")]
+    public string bucketObjectName = "Bucket";
+    [Tooltip("Terrainとバケットの両方に衝突したと判定する時間(秒)")]
+    public float bothCollideWindowSeconds = 3.0f;
+
+    public double timecreated { get; private set; } = 0.0;
+    public Vector3 pos_last_terrain_collision { get; private set; } = Vector3.zero;  // 最後にTerrainと衝突した位置
+    public Vector3 pos_last_bucket_collision { get; private set; } = Vector3.zero;  // 最後にバケットと衝突した位置
+    public double last_terrain_collision_time { get; private set; } = double.NegativeInfinity;  // 最後にTerrainと衝突した時刻
+    public double last_bucket_collision_time { get; private set; } = double.NegativeInfinity;  // 最後にバケットと衝突した時刻
+    public bool both_collided { get; private set; } = false;
+
 
     private void Start()
     {
         timecreated = Time.timeAsDouble;
-        pos_last_collision = transform.position;
     }
 
     private void OnCollisionEnter(Collision collision)
     {
-        if (collision.gameObject.name == "Terrain")
+        if (both_collided)
+            return;
+
+        if (collision.gameObject.name == terrainObjectName)
         {
-            pos_last_collision = transform.position;
+            pos_last_terrain_collision = transform.position;
+            last_terrain_collision_time = Time.timeAsDouble;
+            CheckBothCollided();
         }
-    }
-    private void OnCollisionStay(Collision collision)
-    {
-        if (collision.gameObject.name == "Terrain")
+        else if (collision.gameObject.name == bucketObjectName)
         {
-            pos_last_collision = transform.position;
+            pos_last_bucket_collision = transform.position;
+            last_bucket_collision_time = Time.timeAsDouble;
+            CheckBothCollided();
         }
     }
 
+    private void OnTriggerEnter(Collider other)
+    {
+        if (!both_collided)
+            return;
+
+        if (other.gameObject.name == terrainObjectName)
+        {
+            last_terrain_collision_time = Time.timeAsDouble;
+        }
+        else if (other.gameObject.name == bucketObjectName)
+        {
+            last_bucket_collision_time = Time.timeAsDouble;
+        }
+    }
+
+    private void OnTriggerStay(Collider other)
+    {
+        if (!both_collided)
+            return;
+
+        if (other.gameObject.name == terrainObjectName)
+        {
+            last_terrain_collision_time = Time.timeAsDouble;
+        }
+        else if (other.gameObject.name == bucketObjectName)
+        {
+            last_bucket_collision_time = Time.timeAsDouble;
+        }
+    }
+
+    private void OnCollisionStay(Collision collision)
+    {
+        if (both_collided)
+            return;
+
+        if (collision.gameObject.name == terrainObjectName)
+        {
+            pos_last_terrain_collision = transform.position;
+            last_terrain_collision_time = Time.timeAsDouble;
+            CheckBothCollided();
+        }
+        else if (collision.gameObject.name == bucketObjectName)
+        {
+            pos_last_bucket_collision = transform.position;
+            last_bucket_collision_time = Time.timeAsDouble;
+            CheckBothCollided();
+        }
+    }
+
+    private void CheckBothCollided()
+    {
+        if (both_collided)
+            return;
+
+        var now = Time.timeAsDouble;
+        var withinTerrain = now - last_terrain_collision_time <= bothCollideWindowSeconds;
+        var withinBucket = now - last_bucket_collision_time <= bothCollideWindowSeconds;
+        if (!withinTerrain || !withinBucket)
+            return;
+
+        both_collided = true;
+
+        var colliders = GetComponentsInChildren<Collider>();
+        foreach (var c in colliders)
+        {
+            c.isTrigger = true;
+        }
+    }
+
+    private void CheckReenableCollisions()
+    {
+        if (!both_collided)
+            return;
+
+        var now = Time.timeAsDouble;
+        var withinTerrain = now - last_terrain_collision_time <= bothCollideWindowSeconds;
+        var withinBucket = now - last_bucket_collision_time <= bothCollideWindowSeconds;
+        if (withinTerrain && withinBucket)
+            return;
+
+        both_collided = false;
+
+        var colliders = GetComponentsInChildren<Collider>();
+        foreach (var c in colliders)
+        {
+            c.isTrigger = false;
+        }
+    }
+
+
     private void FixedUpdate()
     {
+        if (both_collided)
+        {
+            CheckReenableCollisions();
+        }
+
         if (Time.timeAsDouble - timecreated > 1.5)
         {
             var rigidbody = GetComponent<Rigidbody>();
+
             var velocity = rigidbody.velocity.sqrMagnitude;
-            if (velocity < 0.2 && Vector3.Distance(transform.position, pos_last_collision) < 0.1)
+            if (velocity < 0.2 && Vector3.Distance(transform.position, pos_last_terrain_collision) < 0.1)
             {
                 manager.OnRockTerrainCollision(this.gameObject);
             }
         }
-        if (this.transform.position.y - pos_last_collision.y < -1.0)
+        if (this.transform.position.y - pos_last_terrain_collision.y < -1.0)
         {
             manager.OnRockTerrainCollision(this.gameObject);
         }
@@ -64,6 +175,15 @@ public class RockObjectDetector : MonoBehaviour
 public class SoilParticleSettings : MonoBehaviour
 {
     public static SoilParticleSettings instance = null;
+
+    [Tooltip("Terrainとして扱うGameObject名")]
+    public string terrainObjectName = "Terrain";
+
+    [Tooltip("バケットとして扱うGameObject名")]
+    public string bucketObjectName = "Bucket";
+
+    [Tooltip("Terrainとバケットの両方に衝突したと判定する時間(秒)")]
+    public float bothCollideWindowSeconds = 3.0f;
 
     [Tooltip("掘削時の地形変形を有効にする")]
     public bool enable = true;
@@ -187,7 +307,11 @@ public class SoilParticleSettings : MonoBehaviour
         rock.transform.parent = null;
         rock.transform.position = point;
         rock.AddComponent<RockObjectDetector>();
-        rock.GetComponent<RockObjectDetector>().manager = this;
+        var detector = rock.GetComponent<RockObjectDetector>();
+        detector.manager = this;
+        detector.terrainObjectName = terrainObjectName;
+        detector.bucketObjectName = bucketObjectName;
+        detector.bothCollideWindowSeconds = bothCollideWindowSeconds;
         rock.GetComponent<MeshFilter>().sharedMesh = mesh_patterns[UnityEngine.Random.Range(0, mesh_patterns.Count)];
 
         rocks.Add(rock);
