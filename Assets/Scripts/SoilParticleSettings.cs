@@ -209,8 +209,14 @@ public class SoilParticleSettings : MonoBehaviour
     [Tooltip("粒子間力を有効化する粒子間距離(m)")]
     public double partileStickDistance = 0.25;
 
+    [Tooltip("粒子反発力を有効化する粒子間距離(m)")]
+    public double partileRepulseDistance = 0.15;
+
     [Tooltip("粒子間力の強さ")]
     public float stickForce = 30.0f;
+
+    [Tooltip("粒子反発力の強さ")]
+    public float repulseForce = 50.0f;
 
     [Tooltip("Terrainに接着する時間(秒)")]
     public float terrainStickWindowSeconds = 5.0f;
