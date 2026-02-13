@@ -7,8 +7,31 @@ using UnityEngine;
 /// </summary>
 public class BucketRocks : MonoBehaviour
 {
+    private void Start()
+    {
+        SoilParticleSettings.instance.RegisterBucket(gameObject);
+    }
+
+    private void OnDestroy()
+    {
+        if (SoilParticleSettings.instance != null)
+        {
+            SoilParticleSettings.instance.UnregisterBucket(gameObject);
+        }
+    }
+
     private void OnCollisionStay(Collision other)
     {
         SoilParticleSettings.instance.OnBucketCollision(other);
+    }
+
+    private void OnTriggerEnter(Collider other)
+    {
+        SoilParticleSettings.instance.OnBucketTrigger(other, transform.position);
+    }
+
+    private void OnTriggerStay(Collider other)
+    {
+        SoilParticleSettings.instance.OnBucketTrigger(other, transform.position);
     }
 }
