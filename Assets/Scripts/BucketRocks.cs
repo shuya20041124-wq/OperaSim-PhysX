@@ -22,16 +22,7 @@ public class BucketRocks : MonoBehaviour
 
     private void OnCollisionStay(Collision other)
     {
-        SoilParticleSettings.instance.OnBucketCollision(other);
+        SoilParticleSettings.instance.OnBucketCollision(other, transform.position);
     }
 
-    private void OnTriggerEnter(Collider other)
-    {
-        SoilParticleSettings.instance.OnBucketTrigger(other, transform.position);
-    }
-
-    private void OnTriggerStay(Collider other)
-    {
-        SoilParticleSettings.instance.OnBucketTrigger(other, transform.position);
-    }
 }

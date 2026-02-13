@@ -18,165 +18,41 @@ public class RockObjectDetector : MonoBehaviour
     public SoilParticleSettings manager;
     [Tooltip("Terrainとして扱うGameObject名")]
     public string terrainObjectName = "Terrain";
-    [Tooltip("Terrainとバケットの両方に衝突したと判定する時間(秒)")]
-    public float bothCollideWindowSeconds = 3.0f;
-
-    public float terrainStickWindowSeconds = 5.0f;
-    public float terrainStickForce = 30.0f;
 
     public double timecreated { get; private set; } = 0.0;
     public Vector3 pos_last_terrain_collision { get; private set; } = Vector3.zero;  // 最後にTerrainと衝突した位置
-    public Vector3 pos_last_bucket_collision { get; private set; } = Vector3.zero;  // 最後にバケットと衝突した位置
     public double last_terrain_collision_time { get; private set; } = double.NegativeInfinity;  // 最後にTerrainと衝突した時刻
-    public double last_bucket_collision_time { get; private set; } = double.NegativeInfinity;  // 最後にバケットと衝突した時刻
-    public bool both_collided { get; private set; } = false;
 
 
     private void Start()
     {
         timecreated = Time.timeAsDouble;
 
-        both_collided = true;
         pos_last_terrain_collision = transform.position;
-        pos_last_bucket_collision = transform.position;
         last_terrain_collision_time = timecreated;
-        last_bucket_collision_time = timecreated;
-
-        var colliders = GetComponentsInChildren<Collider>();
-        foreach (var c in colliders)
-        {
-            c.isTrigger = true;
-        }
     }
 
     private void OnCollisionEnter(Collision collision)
     {
-        if (both_collided)
-            return;
-
         if (collision.gameObject.name == terrainObjectName)
         {
             pos_last_terrain_collision = transform.position;
             last_terrain_collision_time = Time.timeAsDouble;
-            CheckBothCollided();
-        }
-        else if (collision.gameObject.name != "RockPrefab(Clone)")
-        {
-            pos_last_bucket_collision = transform.position;
-            last_bucket_collision_time = Time.timeAsDouble;
-            CheckBothCollided();
-        }
-    }
-
-    private void OnTriggerEnter(Collider other)
-    {
-        if (!both_collided)
-            return;
-
-        if (other.gameObject.name == terrainObjectName)
-        {
-            pos_last_terrain_collision = transform.position;
-            last_terrain_collision_time = Time.timeAsDouble;
-        }
-        else if (other.gameObject.name != "RockPrefab(Clone)")
-        {
-            pos_last_bucket_collision = transform.position;
-            last_bucket_collision_time = Time.timeAsDouble;
-        }
-    }
-
-    private void OnTriggerStay(Collider other)
-    {
-        if (!both_collided)
-            return;
-
-        if (other.gameObject.name == terrainObjectName)
-        {
-            pos_last_terrain_collision = transform.position;
-            last_terrain_collision_time = Time.timeAsDouble;
-        }
-        else if (other.gameObject.name != "RockPrefab(Clone)")
-        {
-            pos_last_bucket_collision = transform.position;
-            last_bucket_collision_time = Time.timeAsDouble;
         }
     }
 
     private void OnCollisionStay(Collision collision)
     {
-        if (both_collided)
-            return;
-
         if (collision.gameObject.name == terrainObjectName)
         {
             pos_last_terrain_collision = transform.position;
             last_terrain_collision_time = Time.timeAsDouble;
-            CheckBothCollided();
-        }
-        else if (collision.gameObject.name != "RockPrefab(Clone)")
-        {
-            pos_last_bucket_collision = transform.position;
-            last_bucket_collision_time = Time.timeAsDouble;
-            CheckBothCollided();
         }
     }
-
-    private void CheckBothCollided()
-    {
-        if (both_collided)
-            return;
-
-        var now = Time.timeAsDouble;
-        var withinTerrain = now - last_terrain_collision_time <= bothCollideWindowSeconds;
-        var withinBucket = now - last_bucket_collision_time <= bothCollideWindowSeconds;
-        if (!withinTerrain || !withinBucket)
-            return;
-
-        both_collided = true;
-
-        var colliders = GetComponentsInChildren<Collider>();
-        foreach (var c in colliders)
-        {
-            c.isTrigger = true;
-        }
-    }
-
-    private void CheckReenableCollisions()
-    {
-        if (!both_collided)
-            return;
-
-        var now = Time.timeAsDouble;
-        var withinTerrain = now - last_terrain_collision_time <= bothCollideWindowSeconds;
-        var withinBucket = now - last_bucket_collision_time <= bothCollideWindowSeconds;
-        if (withinTerrain && withinBucket)
-            return;
-
-        both_collided = false;
-
-        var colliders = GetComponentsInChildren<Collider>();
-        foreach (var c in colliders)
-        {
-            c.isTrigger = false;
-        }
-    }
-
 
     private void FixedUpdate()
     {
         var now = Time.timeAsDouble;
-        if (now - last_terrain_collision_time <= terrainStickWindowSeconds)
-        {
-            var rigidbody = GetComponent<Rigidbody>();
-            var delta = pos_last_terrain_collision - transform.position;
-            rigidbody.AddForce(delta * terrainStickForce);
-        }
-
-        if (both_collided)
-        {
-            CheckReenableCollisions();
-        }
-
         if (now - timecreated > 1.5)
         {
             var rigidbody = GetComponent<Rigidbody>();
@@ -207,9 +83,6 @@ public class SoilParticleSettings : MonoBehaviour
     [Tooltip("バケットとして扱うGameObject名")]
     public string bucketObjectName = "Bucket";
 
-    [Tooltip("Terrainとバケットの両方に衝突したと判定する時間(秒)")]
-    public float bothCollideWindowSeconds = 3.0f;
-
     [Tooltip("掘削時の地形変形を有効にする")]
     public bool enable = true;
 
@@ -228,11 +101,8 @@ public class SoilParticleSettings : MonoBehaviour
     [Tooltip("粒子反発力の強さ")]
     public float repulseForce = 0.0f;
 
-    [Tooltip("Terrainに接着する時間(秒)")]
-    public float terrainStickWindowSeconds = 1.0f;
-
-    [Tooltip("Terrainに接着する力")]
-    public float terrainStickForce = 0.0f;
+    [Tooltip("バケット内側に粒子を出現させる際の接触点からのオフセット(m)")]
+    public float bucketSpawnInset = 0.2f;
 
     [SerializeField]
     [Tooltip("地面の自然崩壊をシミュレートする際に用いる安息角の大きさ(x,y比)")]
@@ -360,15 +230,12 @@ public class SoilParticleSettings : MonoBehaviour
         var detector = rock.GetComponent<RockObjectDetector>();
         detector.manager = this;
         detector.terrainObjectName = terrainObjectName;
-        detector.bothCollideWindowSeconds = bothCollideWindowSeconds;
-        detector.terrainStickWindowSeconds = terrainStickWindowSeconds;
-        detector.terrainStickForce = terrainStickForce;
         rock.GetComponent<MeshFilter>().sharedMesh = mesh_patterns[UnityEngine.Random.Range(0, mesh_patterns.Count)];
 
         rocks.Add(rock);
     }
 
-    public void OnBucketCollision(Collision other)
+    public void OnBucketCollision(Collision other, Vector3 bucketPosition)
     {
         if (!enable)
             return;
@@ -379,11 +246,27 @@ public class SoilParticleSettings : MonoBehaviour
         var now = Time.timeAsDouble;
         if (now - last_created_time > 0.01)
         {
-            var point = other.GetContact(0).point;
-            ModifyTerrain(point, -particle_volume);
-            CreateRock(point);
+            if (other.contactCount == 0)
+                return;
+            var contact = other.GetContact(0);
+            var terrainPoint = contact.point;
+            var rockSpawnPoint = GetBucketInteriorSpawnPoint(terrainPoint, bucketPosition, contact.normal);
+            ModifyTerrain(terrainPoint, -particle_volume);
+            CreateRock(rockSpawnPoint);
             last_created_time = now;
         }
+    }
+
+    private Vector3 GetBucketInteriorSpawnPoint(Vector3 contactPoint, Vector3 bucketPosition, Vector3 contactNormal)
+    {
+        var direction = bucketPosition - contactPoint;
+        if (direction.sqrMagnitude < 1e-5f)
+        {
+            direction = -contactNormal;
+        }
+        direction.Normalize();
+        var inset = Mathf.Max(bucketSpawnInset, 0.0f);
+        return contactPoint + direction * inset;
     }
 
     public void OnBucketTrigger(Collider other, Vector3 bucketPosition)
