@@ -289,11 +289,11 @@ public class SoilParticleSettings : MonoBehaviour
 
     public void OnRockTerrainCollision(GameObject rock)
     {
-        // bucketとの距離が4m以上離れている場合のみ地形に粒子を回収する
+        // bucketとの距離が2m以上離れている場合のみ地形に粒子を回収する
         foreach(var bucket in buckets)
         {
             var dist = Vector3.Distance(bucket.transform.position, rock.transform.position);
-            if (dist < 4.0) {
+            if (dist < 2.0) {
                 return;
             }
         }
